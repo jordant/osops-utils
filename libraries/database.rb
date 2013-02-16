@@ -3,7 +3,7 @@ module RCB
     db_info = nil
     case db
       when "mysql"
-        mysql_info = get_settings_by_role("mysql-master", "mysql")
+        mysql_info = get_settings_by_role(node["osops"]["mysql_role"], "mysql")
         connection_info = {:host => mysql_info["bind_address"], :username => "root", :password => mysql_info["server_root_password"]}    
         
         # create database
