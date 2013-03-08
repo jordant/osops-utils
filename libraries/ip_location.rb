@@ -167,10 +167,11 @@ module RCB
   # the bind endpoint for the service according to that nodes attributes
   #
 
-  def get_access_endpoint(role, server, service)
-    query = "roles:#{role} AND chef_environment:#{node.chef_environment}"
+  #FIXME role vs roles for search https://tickets.opscode.com/browse/CHEF-2902
+  def get_access_endpoint(role_type, server, service)
+    role = node["osops-utils"]["roles"][role_type]
+    query = "role:#{role} AND chef_environment:#{node.chef_environment}"
     result, _, _ = Chef::Search::Query.new.search(:node, query)
-
     if result.length == 1 and result[0].name == node.name
       Chef::Log.debug("Found 1 result for #{role}/#{server}/#{service}, and it's me!")
       result = [node]
@@ -183,6 +184,7 @@ module RCB
       Chef::Log.warn("Cannot find #{server}/#{service} for role #{role}")
       nil
     elsif result.length > 1
+      Chef::Log.info("Found more than one node when searching for #{server}/#{service} for role #{role}, assuming loadbalanced")
       get_lb_endpoint(server,service)
     else
       get_bind_endpoint(server, service, result[0])
@@ -193,8 +195,9 @@ module RCB
   # the service.  This differs from access_endpoint, as it
   # returns all the candidates, not merely the LB vip
   #
-  def get_realserver_endpoints(role, server, service)
-    query = "roles:#{role} AND chef_environment:#{node.chef_environment}"
+  def get_realserver_endpoints(role_type, server, service)
+    role = node["osops-utils"]["roles"][role_type]
+    query = "role:#{role} AND chef_environment:#{node.chef_environment}"
     result, _, _ = Chef::Search::Query.new.search(:node, query)
 
     # if no query results, but role is in current runlist, use that
@@ -203,7 +206,6 @@ module RCB
     result.map { |nodeish| get_bind_endpoint(server, service, nodeish) }
   end
 
-  # Get a specific node hash from another node by role
   #
   # In the event of a search with multiple results,
   # it returns the first match
@@ -212,11 +214,12 @@ module RCB
   # is held on the running node, then the current node hash
   # values will be returned
   #
-  def get_settings_by_role(role, settings)
+  def get_settings_by_role(role_type, settings)
+    role = node["osops-utils"]["roles"][role_type]
     if node["roles"].include?(role)
       node[settings]
     else
-      query = "roles:#{role} AND chef_environment:#{node.chef_environment}"
+      query = "role:#{role} AND chef_environment:#{node.chef_environment}"
       result, _, _ = Chef::Search::Query.new.search(:node, query)
 
       if result.length == 0
@@ -309,11 +312,12 @@ class Chef::Recipe::IPManagement
   end
 
   # find the realserver ips for a particular role
-  def self.get_ips_for_role(role, network, node)
+  def self.get_ips_for_role(role_type, network, node)
+    role = node["osops-utils"]["roles"][role_type]
     if Chef::Config[:solo] then
       return [self.get_ip_for_net(network, node)]
     else
-      candidates, _, _ = Chef::Search::Query.new.search(:node, "chef_environment:#{node.chef_environment} AND roles:#{role}")
+      candidates, _, _ = Chef::Search::Query.new.search(:node, "chef_environment:#{node.chef_environment} AND role:#{role}")
       if candidates == nil or candidates.length <= 0
         if node["roles"].include?(role)
           candidates = [node]
@@ -331,11 +335,12 @@ class Chef::Recipe::IPManagement
   end
 
   # find the loadbalancer ip for a particular role
-  def self.get_access_ip_for_role(role, network, node)
+  def self.get_access_ip_for_role(role_type, network, node)
+    role = node["osops-utils"]["roles"][role_type]
     if Chef::Config[:solo] then
       return self.get_ip_for_net(network, node)
     else
-      candidates, _, _ = Chef::Search::Query.new.search(:node, "chef_environment:#{node.chef_environment} AND roles:#{role}")
+      candidates, _, _ = Chef::Search::Query.new.search(:node, "chef_environment:#{node.chef_environment} AND role:#{role}")
       if candidates == nil or candidates.length == 0
         if node["roles"].include?(role)
           candidates = [ node ]
